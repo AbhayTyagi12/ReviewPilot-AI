@@ -1,16 +1,29 @@
 
 from fastapi.testclient import TestClient
 
-from main import app
+import main
 
-client = TestClient(app)
+
+client = TestClient(main.app)
+
+
+def mock_ai_review(monkeypatch):
+    """Prevent tests from waiting for the local Ollama model."""
+    monkeypatch.setattr(
+        main,
+        "explain_findings",
+        lambda code, findings: {
+            "summary": "Potential security issues detected.",
+            "explanations": [],
+        },
+    )
 
 
 def test_home():
     response = client.get("/")
 
     assert response.status_code == 200
-    assert response.json()["message"] == "Welcome to ReviewPilot AI!"
+    assert response.json()["status"] == "running"
 
 
 def test_health():
@@ -20,7 +33,9 @@ def test_health():
     assert response.json()["status"] == "healthy"
 
 
-def test_review_detects_security_issues():
+def test_review_detects_security_issues(monkeypatch):
+    mock_ai_review(monkeypatch)
+
     code = """
 import subprocess
 
@@ -36,7 +51,11 @@ def run(user_input):
     result = response.json()
     assert result["issue_count"] >= 2
 
-    rule_ids = {finding["rule_id"] for finding in result["findings"]}
+    rule_ids = {
+        finding["rule_id"]
+        for finding in result["findings"]
+    }
+
     assert "B602" in rule_ids
     assert "B307" in rule_ids
 
@@ -56,3 +75,25 @@ def test_review_rejects_oversized_code():
     assert response.status_code == 413
     assert response.json()["detail"] == "Code exceeds the 100 KB limit."
 
+
+def test_review_includes_ai_explanations(monkeypatch):
+    mock_ai_review(monkeypatch)
+
+    response = client.post(
+        "/review",
+        json={
+            "code": (
+                "def calculate(user_input):\n"
+                "    return eval(user_input)\n"
+            )
+        },
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+    assert "ai_review" in data
+    assert data["ai_review"]["summary"] == (
+        "Potential security issues detected."
+    )
+    assert data["ai_review"]["explanations"] == []

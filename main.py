@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from app.review_engine import review_python_file
+from app.ai_reviewer import explain_findings
 
 app = FastAPI(
     title="ReviewPilot AI",
@@ -34,6 +35,7 @@ def health_check():
     }
 
 
+
 @app.post("/review")
 def review_code(request: ReviewRequest):
     """Review submitted Python code for quality and security issues."""
@@ -55,7 +57,22 @@ def review_code(request: ReviewRequest):
             target = Path(temp_dir) / "review_input.py"
             target.write_text(request.code, encoding="utf-8")
 
-            return review_python_file(str(target))
+            result = review_python_file(str(target))
+
+        # Add local AI explanations without replacing static findings.
+        try:
+            result["ai_review"] = explain_findings(
+                request.code,
+                result.get("findings", []),
+            )
+        except Exception:
+            # Static analysis should remain useful if AI fails.
+            result["ai_review"] = {
+                "summary": "AI explanations are temporarily unavailable.",
+                "explanations": [],
+            }
+
+        return result
 
     except subprocess.TimeoutExpired:
         raise HTTPException(
@@ -72,5 +89,3 @@ def review_code(request: ReviewRequest):
             status_code=500,
             detail="Unable to process the submitted code.",
         ) from error
-
-
