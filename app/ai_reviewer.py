@@ -8,7 +8,7 @@ import urllib.request
 
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL_NAME = "qwen2.5-coder:1.5b"
-REQUEST_TIMEOUT = 90
+REQUEST_TIMEOUT = 180
 
 
 def explain_findings(code: str, findings: list[dict]) -> dict:
