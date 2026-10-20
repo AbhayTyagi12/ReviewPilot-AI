@@ -20,6 +20,9 @@ if "review_result" not in st.session_state:
 if "review_error" not in st.session_state:
     st.session_state.review_error = None
 
+if "reviewed_code" not in st.session_state:
+    st.session_state.reviewed_code = ""
+
 # -------------------- Styling --------------------
 
 st.markdown(
@@ -112,6 +115,7 @@ with st.sidebar:
     if st.button("🗑️ Clear Results", use_container_width=True):
         st.session_state.review_result = None
         st.session_state.review_error = None
+        st.session_state.reviewed_code = ""
         st.rerun()
 
     st.divider()
@@ -125,8 +129,8 @@ code = st.text_area(
     "Paste your code",
     height=300,
     placeholder=(
-        "def calculate(value):\n"
-        "    return eval(value)\n"
+        "def calculate(a, b):\n"
+        '    return eval("a + b")\n'
     ),
     help="Maximum submission size: 100 KB.",
 )
@@ -148,6 +152,7 @@ with right:
 if review_clicked:
     st.session_state.review_result = None
     st.session_state.review_error = None
+    st.session_state.reviewed_code = ""
 
     if not code.strip():
         st.session_state.review_error = (
@@ -200,6 +205,7 @@ if review_clicked:
                         result["ai_review"] = {}
 
                     st.session_state.review_result = result
+                    st.session_state.reviewed_code = code
 
         except requests.exceptions.Timeout:
             st.session_state.review_error = (
@@ -235,14 +241,25 @@ if result is not None:
     ai_review = result.get("ai_review", {})
     explanations = ai_review.get("explanations", [])
 
+    if not isinstance(findings, list):
+        findings = []
+
     if not isinstance(explanations, list):
         explanations = []
 
     # Normalize severity labels for dashboard counting and sorting.
     def severity_of(finding):
-        value = str(finding.get("severity", "unknown")).lower().strip()
+        if not isinstance(finding, dict):
+            return "unknown"
 
-        if value in {"critical", "high", "medium", "low", "info", "informational"}:
+        value = str(
+            finding.get("severity", "unknown")
+        ).lower().strip()
+
+        if value in {
+            "critical", "high", "medium", "low",
+            "info", "informational",
+        }:
             return "info" if value == "informational" else value
 
         return "unknown"
@@ -295,7 +312,8 @@ if result is not None:
             "This does not guarantee that the code is secure."
         )
 
-    # Severity distribution.
+    # -------------------- Severity Distribution --------------------
+
     st.subheader("Severity Distribution")
 
     severity_columns = st.columns(5)
@@ -315,8 +333,14 @@ if result is not None:
     else:
         severity_filter = st.multiselect(
             "Filter by severity",
-            options=["critical", "high", "medium", "low", "info", "unknown"],
-            default=["critical", "high", "medium", "low", "info", "unknown"],
+            options=[
+                "critical", "high", "medium",
+                "low", "info", "unknown",
+            ],
+            default=[
+                "critical", "high", "medium",
+                "low", "info", "unknown",
+            ],
             format_func=lambda value: value.title(),
         )
 
@@ -330,19 +354,21 @@ if result is not None:
             "sorted by severity."
         )
 
-        for index, finding in enumerate(filtered_findings, start=1):
+        for finding in filtered_findings:
+            if not isinstance(finding, dict):
+                continue
+
             severity = severity_of(finding)
             rule_id = finding.get("rule_id", "Unknown rule")
             message = finding.get("message", "Finding")
             file_name = finding.get("file", "Unknown")
             line_number = finding.get("line", "Unknown")
 
-            title = (
-                f"{severity.upper()} · {rule_id} · {message}"
-            )
+            title = f"{severity.upper()} · {rule_id} · {message}"
 
             with st.expander(title):
                 detail_columns = st.columns(3)
+
                 detail_columns[0].write(
                     f"**Tool:** {finding.get('tool', 'Unknown')}"
                 )
@@ -350,12 +376,7 @@ if result is not None:
                 detail_columns[2].write(f"**Line:** {line_number}")
 
                 st.markdown("**Description**")
-                st.write(
-                    finding.get(
-                        "description",
-                        message,
-                    )
-                )
+                st.write(finding.get("description", message))
 
                 if finding.get("confidence") is not None:
                     st.write(
@@ -388,20 +409,38 @@ if result is not None:
             with st.container(border=True):
                 st.markdown(f"**Rule:** {rule_id}")
 
-                st.write(
-                    explanation.get(
-                        "explanation",
-                        "No explanation provided.",
-                    )
-                )
+                explanation_text = explanation.get("explanation", "")
+                if explanation_text:
+                    st.markdown("**Why this matters**")
+                    st.write(explanation_text)
 
-                st.markdown("**Suggested Fix**")
-                st.write(
-                    explanation.get(
-                        "suggestion",
-                        "No suggestion provided.",
+                suggestion = explanation.get("suggestion", "")
+                if suggestion:
+                    st.markdown("**Suggested Fix**")
+                    st.write(suggestion)
+
+                corrected_code = explanation.get("corrected_code", "")
+
+                if isinstance(corrected_code, str) and corrected_code.strip():
+                    st.markdown("### Before vs. After Code Comparison")
+
+                    before_col, after_col = st.columns(2)
+
+                    with before_col:
+                        st.markdown("**🔴 Before — Original Code**")
+                        st.code(
+                            st.session_state.reviewed_code,
+                            language="python",
+                        )
+
+                    with after_col:
+                        st.markdown("**🟢 After — Suggested Fix**")
+                        st.code(corrected_code, language="python")
+
+                    st.caption(
+                        "The suggested code has not been automatically "
+                        "applied or tested. Review it before using it."
                     )
-                )
 
     elif summary != "No issues were detected by the static analyzers.":
         st.info(
