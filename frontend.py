@@ -1,4 +1,3 @@
-
 import requests
 import streamlit as st
 
@@ -22,6 +21,12 @@ if "review_error" not in st.session_state:
 
 if "reviewed_code" not in st.session_state:
     st.session_state.reviewed_code = ""
+
+if "code_input" not in st.session_state:
+    st.session_state.code_input = (
+        'def calculate(a, b):\n'
+        '    return eval("a + b")\n'
+    )
 
 # -------------------- Styling --------------------
 
@@ -123,16 +128,13 @@ with st.sidebar:
 
 # -------------------- Code Input --------------------
 
-st.subheader("📝 Submit Python Code")
+st.subheader("📝 Analyze Python Code")
 
 code = st.text_area(
-    "Paste your code",
-    height=300,
-    placeholder=(
-        "def calculate(a, b):\n"
-        '    return eval("a + b")\n'
-    ),
-    help="Maximum submission size: 100 KB.",
+    "Paste your Python code below",
+    key="code_input",
+    height=260,
+    help="Maximum input size: 100 KB.",
 )
 
 left, right = st.columns([3, 1])
@@ -145,7 +147,7 @@ with left:
     )
 
 with right:
-    st.caption(f"Characters: {len(code):,}")
+    st.caption(f"Characters: {len(code):,} / {MAX_CODE_SIZE:,}")
 
 # -------------------- Submit Review --------------------
 
@@ -244,10 +246,12 @@ if result is not None:
     if not isinstance(findings, list):
         findings = []
 
+    if not isinstance(ai_review, dict):
+        ai_review = {}
+
     if not isinstance(explanations, list):
         explanations = []
 
-    # Normalize severity labels for dashboard counting and sorting.
     def severity_of(finding):
         if not isinstance(finding, dict):
             return "unknown"
@@ -290,14 +294,17 @@ if result is not None:
 
     st.success("Code review completed.")
 
+    # -------------------- Security Overview --------------------
+
     st.subheader("📊 Security Overview")
 
-    metrics = st.columns(4)
+    metrics = st.columns(5)
 
     metrics[0].metric("Total Findings", len(findings))
     metrics[1].metric("Critical / High", high_risk)
     metrics[2].metric("Medium", counts["medium"])
-    metrics[3].metric("AI Explanations", len(explanations))
+    metrics[3].metric("Low", counts["low"])
+    metrics[4].metric("AI Explanations", len(explanations))
 
     if high_risk:
         st.warning(
@@ -448,7 +455,7 @@ if result is not None:
             "The static analysis results are still shown above."
         )
 
-    # -------------------- Debugging --------------------
+    # -------------------- Developer Details --------------------
 
     with st.expander("Developer Details — Complete JSON Response"):
         st.json(result)
