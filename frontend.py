@@ -1,8 +1,242 @@
 import requests
 import streamlit as st
+import io
+import json
+from datetime import datetime, timezone
+
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import mm
+from reportlab.platypus import (
+    SimpleDocTemplate,
+    Paragraph,
+    Spacer,
+    Table,
+    TableStyle,
+    Preformatted,
+)
 
 API_URL = "http://127.0.0.1:8000/review"
 MAX_CODE_SIZE = 100_000
+def build_pdf_report(report):
+    """Build a downloadable PDF security report in memory."""
+    buffer = io.BytesIO()
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=18 * mm,
+        leftMargin=18 * mm,
+        topMargin=18 * mm,
+        bottomMargin=18 * mm,
+        title="ReviewPilot AI Security Report",
+        author="ReviewPilot AI",
+    )
+
+    styles = getSampleStyleSheet()
+
+    styles.add(ParagraphStyle(
+        name="ReportTitle",
+        parent=styles["Title"],
+        fontSize=23,
+        leading=28,
+        alignment=TA_CENTER,
+        textColor=colors.HexColor("#172554"),
+        spaceAfter=8,
+    ))
+
+    styles.add(ParagraphStyle(
+        name="SectionHeading",
+        parent=styles["Heading2"],
+        textColor=colors.HexColor("#1D4ED8"),
+        spaceBefore=12,
+        spaceAfter=7,
+    ))
+
+    styles.add(ParagraphStyle(
+        name="SmallBody",
+        parent=styles["BodyText"],
+        fontSize=8,
+        leading=11,
+        spaceAfter=5,
+        wordWrap="CJK",
+    ))
+
+    styles.add(ParagraphStyle(
+        name="CodeText",
+        parent=styles["Code"],
+        fontName="Courier",
+        fontSize=7,
+        leading=9,
+        backColor=colors.HexColor("#F1F5F9"),
+        borderPadding=6,
+        wordWrap="CJK",
+    ))
+
+    story = []
+
+    def safe_text(value):
+        """Escape dynamic content before inserting it into PDF paragraphs."""
+        from xml.sax.saxutils import escape
+        return escape(str(value if value is not None else "—"))
+
+    def add_paragraph(value, style="SmallBody"):
+        story.append(Paragraph(safe_text(value), styles[style]))
+
+    story.append(Paragraph(
+        "ReviewPilot AI",
+        styles["ReportTitle"],
+    ))
+    story.append(Paragraph(
+        "Code Security & AI Review Report",
+        styles["Heading2"],
+    ))
+    story.append(Spacer(1, 5 * mm))
+
+    add_paragraph(
+        "Generated: "
+        + datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    )
+    add_paragraph(
+        "Total findings: " + str(report.get("total_findings", 0))
+    )
+
+    story.append(Paragraph("Severity Summary", styles["SectionHeading"]))
+
+    severity_counts = report.get("severity_counts", {})
+    severity_rows = [
+        ["Severity", "Findings"],
+        ["Critical", str(severity_counts.get("critical", 0))],
+        ["High", str(severity_counts.get("high", 0))],
+        ["Medium", str(severity_counts.get("medium", 0))],
+        ["Low", str(severity_counts.get("low", 0))],
+        ["Informational", str(severity_counts.get("info", 0))],
+    ]
+
+    severity_table = Table(
+        severity_rows,
+        colWidths=[90 * mm, 45 * mm],
+        repeatRows=1,
+    )
+    severity_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#172554")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E1")),
+        ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#F8FAFC")),
+        ("PADDING", (0, 0), (-1, -1), 7),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    ]))
+    story.append(severity_table)
+
+    ai_review = report.get("ai_review", {})
+    if not isinstance(ai_review, dict):
+        ai_review = {}
+
+    story.append(Paragraph("AI Review Summary", styles["SectionHeading"]))
+    add_paragraph(
+        ai_review.get("summary", "No AI summary was returned.")
+    )
+
+    story.append(Paragraph("Detected Findings", styles["SectionHeading"]))
+
+    findings = report.get("findings", [])
+    if not isinstance(findings, list):
+        findings = []
+
+    if not findings:
+        add_paragraph("No findings were reported by the configured analyzers.")
+    else:
+        for index, finding in enumerate(findings, start=1):
+            if not isinstance(finding, dict):
+                continue
+
+            story.append(Paragraph(
+                f"Finding {index}: {safe_text(finding.get('rule_id', 'Unknown rule'))}",
+                styles["Heading3"],
+            ))
+
+            add_paragraph(
+                "Severity: " + str(finding.get("severity", "Unknown"))
+                + " | Tool: " + str(finding.get("tool", "Unknown"))
+                + " | Line: " + str(finding.get("line", "Unknown"))
+            )
+            add_paragraph("Issue: " + str(
+                finding.get("message", "No message provided.")
+            ))
+            add_paragraph("Description: " + str(
+                finding.get("description", "No description provided.")
+            ))
+
+            suggestion = finding.get("suggestion")
+            if suggestion:
+                add_paragraph("Analyzer suggestion: " + str(suggestion))
+
+            story.append(Spacer(1, 2 * mm))
+
+    explanations = ai_review.get("explanations", [])
+    if not isinstance(explanations, list):
+        explanations = []
+
+    story.append(Paragraph("AI Explanations & Suggested Fixes", styles["SectionHeading"]))
+
+    if not explanations:
+        add_paragraph("No AI explanations were returned for this review.")
+    else:
+        for explanation in explanations:
+            if not isinstance(explanation, dict):
+                continue
+
+            story.append(Paragraph(
+                "Rule: " + safe_text(explanation.get("rule_id", "General")),
+                styles["Heading3"],
+            ))
+
+            explanation_text = explanation.get("explanation", "")
+            if explanation_text:
+                add_paragraph("Why this matters: " + str(explanation_text))
+
+            suggestion = explanation.get("suggestion", "")
+            if suggestion:
+                add_paragraph("Suggested fix: " + str(suggestion))
+
+            corrected_code = explanation.get("corrected_code", "")
+            if isinstance(corrected_code, str) and corrected_code.strip():
+                story.append(Paragraph(
+                    "Suggested corrected code",
+                    styles["Heading4"],
+                ))
+                story.append(Preformatted(
+                    corrected_code[:12000],
+                    styles["CodeText"],
+                ))
+
+            story.append(Spacer(1, 3 * mm))
+
+    story.append(Paragraph("Reviewed Source Code", styles["SectionHeading"]))
+
+    source_code = report.get("reviewed_code", "")
+    if source_code:
+        story.append(Preformatted(
+            str(source_code)[:20000],
+            styles["CodeText"],
+        ))
+    else:
+        add_paragraph("No source code was included in the report.")
+
+    story.append(Spacer(1, 5 * mm))
+    add_paragraph(
+        "Disclaimer: Findings and AI suggestions require human review. "
+        "A clean report does not guarantee that code is secure. "
+        "Suggested fixes are not automatically applied or tested."
+    )
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer.getvalue()
+
 
 st.set_page_config(
     page_title="ReviewPilot AI | Security Dashboard",
@@ -459,6 +693,46 @@ if result is not None:
 
     with st.expander("Developer Details — Complete JSON Response"):
         st.json(result)
+
+    # -------------------- Export Review Report --------------------
+
+    st.subheader("📥 Export Security Report")
+
+    report = {
+        "project": "ReviewPilot AI",
+        "reviewed_code": st.session_state.reviewed_code,
+        "total_findings": len(findings),
+        "severity_counts": {
+            "critical": counts["critical"],
+            "high": counts["high"],
+            "medium": counts["medium"],
+            "low": counts["low"],
+            "info": counts["info"],
+        },
+        "findings": findings,
+        "ai_review": ai_review,
+    }
+
+    st.download_button(
+        label="⬇️ Download JSON Report",
+        data=__import__("json").dumps(
+            report,
+            indent=2,
+            ensure_ascii=False,
+        ),
+        file_name="reviewpilot_security_report.json",
+        mime="application/json",
+        use_container_width=True,
+    )
+    pdf_bytes = build_pdf_report(report)
+
+    st.download_button(
+        label="📄 Download PDF Security Report",
+        data=pdf_bytes,
+        file_name="reviewpilot_security_report.pdf",
+        mime="application/pdf",
+        use_container_width=True,
+    )
 
 # -------------------- Footer --------------------
 
