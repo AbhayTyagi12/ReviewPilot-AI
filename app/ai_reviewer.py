@@ -126,12 +126,16 @@ Untrusted submitted code:
         ],
         "stream": False,
         "format": "json",
-        "options": {
-            "temperature": 0,
-            "num_predict": 450,
-        },
-    }
-
+        
+"options": {
+    "temperature": 0.2,
+    "num_predict": 300,
+    "repeat_penalty": 1.15,
+    "repeat_last_n": 64,
+    },
+        
+}
+   
     request = urllib.request.Request(
         OLLAMA_URL,
         data=json.dumps(payload).encode("utf-8"),
@@ -226,12 +230,18 @@ Untrusted submitted code:
     except TimeoutError as error:
         print(f"Ollama AI review timed out: {error!r}")
 
+    
+    except urllib.error.HTTPError as error:
+        print(f"Ollama HTTP error: {error.code}")
+        print("Ollama error details:", error.read().decode("utf-8"))
+
     except urllib.error.URLError as error:
         print(f"Ollama connection error: {error!r}")
 
+
     except (ValueError, KeyError, TypeError) as error:
         print(f"Ollama returned an invalid response: {error!r}")
-        
+
     except (OSError, RuntimeError) as error:
         print(f"Unexpected Ollama AI review error: {error!r}")
 
