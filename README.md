@@ -3,6 +3,12 @@
 **AI-Powered Code Review and Security Analysis Platform**
 
 ReviewPilot AI is a Python-based code review tool that combines static analysis and AI-generated explanations to help developers identify potential bugs, security vulnerabilities, and code quality issues.
+## 📸 Project Preview
+
+![ReviewPilot AI Dashboard](screenshots/dashboard.png)
+
+*ReviewPilot AI dashboard showing security findings and AI-generated code review explanations.*
+
 
 ## 🚀 Features
 
