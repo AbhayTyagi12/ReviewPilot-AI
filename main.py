@@ -1,12 +1,12 @@
-import tempfile
 import subprocess
+import tempfile
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from app.review_engine import review_python_file
 from app.ai_reviewer import explain_findings
+from app.review_engine import review_python_file
 
 app = FastAPI(
     title="ReviewPilot AI",
@@ -65,12 +65,15 @@ def review_code(request: ReviewRequest):
                 request.code,
                 result.get("findings", []),
             )
-        except Exception:
+       
+        except (OSError, RuntimeError, ValueError, KeyError, TypeError) as error:
+            print(f"AI review failed: {error!r}")
             # Static analysis should remain useful if AI fails.
             result["ai_review"] = {
                 "summary": "AI explanations are temporarily unavailable.",
                 "explanations": [],
             }
+
 
         return result
 

@@ -1,10 +1,8 @@
 
-import ast
 import json
 import re
 import urllib.error
 import urllib.request
-
 
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL_NAME = "qwen2.5-coder:1.5b"
@@ -152,14 +150,14 @@ Untrusted submitted code:
         parsed = json.loads(content)
 
         if not isinstance(parsed, dict):
-            raise ValueError("AI response must be a JSON object.")
+            raise TypeError("AI response must be a JSON object.")
 
         if not isinstance(parsed.get("summary"), str):
-            raise ValueError("AI response is missing a valid summary.")
+            raise TypeError("AI response is missing a valid summary.")
 
         explanations = parsed.get("explanations")
         if not isinstance(explanations, list):
-            raise ValueError("AI response is missing valid explanations.")
+            raise TypeError("AI response is missing valid explanations.")
 
         validated_explanations = []
 
@@ -233,8 +231,8 @@ Untrusted submitted code:
 
     except (ValueError, KeyError, TypeError) as error:
         print(f"Ollama returned an invalid response: {error!r}")
-
-    except Exception as error:
+        
+    except (OSError, RuntimeError) as error:
         print(f"Unexpected Ollama AI review error: {error!r}")
 
     return {

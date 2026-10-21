@@ -1,21 +1,20 @@
+import io
+from datetime import UTC, datetime
+
 import requests
 import streamlit as st
-import io
-import json
-from datetime import datetime, timezone
-
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import (
-    SimpleDocTemplate,
     Paragraph,
+    Preformatted,
+    SimpleDocTemplate,
     Spacer,
     Table,
     TableStyle,
-    Preformatted,
 )
 
 API_URL = "http://127.0.0.1:8000/review"
@@ -97,7 +96,7 @@ def build_pdf_report(report):
 
     add_paragraph(
         "Generated: "
-        + datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        + datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
     )
     add_paragraph(
         "Total findings: " + str(report.get("total_findings", 0))

@@ -1,10 +1,12 @@
-from fastapi.testclient import TestClient
 import json
+
+from fastapi.testclient import TestClient
+
 import main
+
 client = TestClient(main.app)
 
 from app import ai_reviewer
-
 
 SAMPLE_FINDINGS = [
     {
