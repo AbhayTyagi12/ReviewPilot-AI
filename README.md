@@ -116,7 +116,7 @@ Run the automated test suite from the project root:
 python -m pytest -v
 ```
 
-**Current development status:** 10 tests passed in the local test run.
+ **Latest local test run:** 18 tests passed with `python -m pytest`.
 
 ## 📊 Example Use Case
 
